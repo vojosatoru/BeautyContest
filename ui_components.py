@@ -1,6 +1,6 @@
 # ui_components.py
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import messagebox, ttk, simpledialog
 import config
 from game_logic import BeautyContestLogic
 import random
@@ -10,10 +10,10 @@ class BeautyContestUI(tk.Tk):
         super().__init__()
         self.withdraw() 
         
-        # 1. Pilih Mode Permainan
+        # 1. Pilih Mode
         is_single_player = messagebox.askyesno("Pilih Mode", "Apakah Anda ingin bermain Mode Single Player (Lawan Bot)?\n\nYes = Lawan Bot\nNo = Multiplayer (Main Bergantian)")
         
-        # 2. Pilih Jumlah Pemain (Sekarang menggunakan Dropdown)
+        # 2. Pilih Jumlah Pemain
         msg_prompt = "Pilih total pemain (termasuk Anda):" if is_single_player else "Pilih jumlah pemain:"
         num_players = self.ask_player_count_dropdown("Setup Permainan", msg_prompt)
         
@@ -21,8 +21,27 @@ class BeautyContestUI(tk.Tk):
             self.destroy()
             return
 
+        # 3. INPUT NAMA PEMAIN
+        player_names = []
+        if is_single_player:
+            # Single Player: Tanya nama Player 1 saja
+            name = simpledialog.askstring("Nama Pemain", "Masukkan Nama Anda:")
+            if not name or name.strip() == "":
+                name = "Player 1"
+            player_names.append(name)
+        else:
+            # Multiplayer: Tanya nama semua pemain
+            for i in range(num_players):
+                name = simpledialog.askstring("Nama Pemain", f"Masukkan Nama Player {i+1}:")
+                if not name or name.strip() == "":
+                    name = f"Player {i+1}"
+                player_names.append(name)
+
         self.deiconify()
-        self.logic = BeautyContestLogic(num_players, single_player_mode=is_single_player)
+        
+        # Kirim nama ke Logic
+        self.logic = BeautyContestLogic(num_players, single_player_mode=is_single_player, player_names=player_names)
+        
         self.can_play = True
         self.current_round_results = None
         
@@ -32,11 +51,8 @@ class BeautyContestUI(tk.Tk):
         self.update_ui_state()
 
     def ask_player_count_dropdown(self, title, prompt):
-        """Dialog kustom untuk memilih angka menggunakan Dropdown"""
         dialog = tk.Toplevel(self)
         dialog.title(title)
-        
-        # Ukuran dan Posisi Dialog
         w, h = 350, 180
         sw = self.winfo_screenwidth()
         sh = self.winfo_screenheight()
@@ -45,7 +61,6 @@ class BeautyContestUI(tk.Tk):
         dialog.geometry(f"{w}x{h}+{x}+{y}")
         dialog.resizable(False, False)
         
-        # Variabel untuk menyimpan hasil
         result = [None]
         
         def on_confirm():
@@ -53,28 +68,22 @@ class BeautyContestUI(tk.Tk):
                 result[0] = int(combo.get())
                 dialog.destroy()
             
-        # Layout Dialog
         frame = tk.Frame(dialog, padx=20, pady=20)
         frame.pack(fill=tk.BOTH, expand=True)
         
         tk.Label(frame, text=prompt, font=config.FONT_NORMAL, wraplength=300).pack(pady=(0, 15))
         
-        # Dropdown (2 sampai 10)
         values = list(range(2, 11))
         combo = ttk.Combobox(frame, values=values, state="readonly", font=config.FONT_BIG, width=5, justify="center")
-        combo.set(4) # Default pilihan 4
+        combo.set(4)
         combo.pack(pady=(0, 20))
         
-        btn = ttk.Button(frame, text="Mulai Permainan", command=on_confirm)
+        btn = ttk.Button(frame, text="Lanjut", command=on_confirm)
         btn.pack(ipadx=10, ipady=5)
         
-        # --- PERBAIKAN DI SINI ---
-        # Kita HAPUS dialog.transient(self) agar tidak ikut tersembunyi saat parent di-withdraw.
-        # Sebagai gantinya, kita paksa dia fokus dan muncul di depan.
         dialog.lift()
         dialog.focus_force()
-        dialog.grab_set() # Tetap modal (blokir interaksi lain)
-        
+        dialog.grab_set()
         self.wait_window(dialog)
         
         return result[0]
@@ -98,7 +107,7 @@ class BeautyContestUI(tk.Tk):
         self.frame_left = tk.Frame(self, width=400, bg=config.COLOR_BG_MAIN)
         self.frame_left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        self.lbl_turn_info = tk.Label(self.frame_left, text="Player 1 Choosing...", 
+        self.lbl_turn_info = tk.Label(self.frame_left, text="Menunggu...", 
                                       font=config.FONT_HEADER, bg=config.COLOR_BG_MAIN)
         self.lbl_turn_info.pack(pady=(0, 5))
         
@@ -122,15 +131,18 @@ class BeautyContestUI(tk.Tk):
         frame_table = tk.Frame(self.frame_right)
         frame_table.pack(fill=tk.X, padx=5)
 
-        columns = ("id", "role", "score")
+        # Update Kolom: Nama Pemain jadi prioritas
+        columns = ("name", "role", "score")
         self.tree_score = ttk.Treeview(frame_table, columns=columns, show="headings", height=8)
         
-        self.tree_score.heading("id", text="Player")
-        self.tree_score.column("id", width=60, anchor="center")
-        self.tree_score.heading("role", text="Tipe")
+        self.tree_score.heading("name", text="Nama Pemain")
+        self.tree_score.column("name", width=100, anchor="w") # Align left biar nama panjang muat
+        
+        self.tree_score.heading("role", text="Peran")
         self.tree_score.column("role", width=60, anchor="center")
+        
         self.tree_score.heading("score", text="Poin")
-        self.tree_score.column("score", width=60, anchor="center")
+        self.tree_score.column("score", width=50, anchor="center")
 
         scrollbar = ttk.Scrollbar(frame_table, orient=tk.VERTICAL, command=self.tree_score.yview)
         self.tree_score.configure(yscroll=scrollbar.set)
@@ -177,21 +189,24 @@ class BeautyContestUI(tk.Tk):
         current_p = self.logic.get_current_player()
         current_p_id = current_p.id if current_p else -1
         
+        # Update Info Giliran Menggunakan NAMA
         if current_p_id != -1:
+            turn_text = f"Giliran {current_p.name}"
             if current_p.is_bot:
-                self.lbl_turn_info.config(text=f"Bot (P{current_p_id}) sedang berpikir...", fg="blue")
+                self.lbl_turn_info.config(text=f"{current_p.name} berpikir...", fg="blue")
                 self.lbl_input_display.config(text="...")
                 for widget in self.frame_grid.winfo_children():
                     widget.config(state="disabled")
                 self.after(1000, self.run_bot_turn)
             else:
-                self.lbl_turn_info.config(text=f"Giliran Player {current_p_id}", fg="black")
+                self.lbl_turn_info.config(text=turn_text, fg="black")
                 self.lbl_input_display.config(text="?")
                 for widget in self.frame_grid.winfo_children():
                     widget.config(state="normal")
         
         self.update_active_rules_display()
         
+        # Update Scoreboard dengan NAMA
         for item in self.tree_score.get_children():
             self.tree_score.delete(item)
             
@@ -205,7 +220,7 @@ class BeautyContestUI(tk.Tk):
             elif p.id == current_p_id:
                 row_tag = 'active_turn'
             
-            self.tree_score.insert("", "end", values=(f"P{p.id}", role, score_display), tags=(row_tag,))
+            self.tree_score.insert("", "end", values=(p.name, role, score_display), tags=(row_tag,))
 
     def run_bot_turn(self):
         if not self.can_play: return
@@ -259,11 +274,13 @@ class BeautyContestUI(tk.Tk):
             participants = res['winners'] + res['losers']
             participants.sort(key=lambda p: p.id)
             
-            self.log(f"{'Player':<8} | {'Angka':<5}")
-            self.log("-" * 16)
+            # Format tabel log menggunakan NAMA
+            # Batasi panjang nama di log agar tabel tetap rapi
+            self.log(f"{'Nama':<10} | {'Angka':<5}")
+            self.log("-" * 18)
             for p in participants:
-                tag = "(B)" if p.is_bot else "(You)"
-                self.log(f"P{p.id:<2} {tag:<5}| {int(p.last_choice)}")
+                display_name = (p.name[:9] + '..') if len(p.name) > 9 else p.name
+                self.log(f"{display_name:<10} | {int(p.last_choice)}")
             
             self.after(delay, lambda: self.animate_step(1))
             
@@ -282,12 +299,13 @@ class BeautyContestUI(tk.Tk):
             if not res['winners']:
                 self.log("Tidak ada Pemenang!", color="blue", bold=True)
             else:
-                winner_ids = [str(p.id) for p in res['winners']]
-                self.log(f"WINNER: P{', '.join(winner_ids)}", color="green", bold=True)
+                # Tampilkan Nama Pemenang
+                winner_names = [p.name for p in res['winners']]
+                self.log(f"WINNER: {', '.join(winner_names)}", color="green", bold=True)
             
             for p in res['losers']:
                 if p.is_eliminated and p.score == config.ELIMINATION_THRESHOLD:
-                    self.log(f"-> P{p.id} TERELIMINASI!", color="red", bold=True)
+                    self.log(f"-> {p.name} TERELIMINASI!", color="red", bold=True)
             
             self.update_ui_state()
             self.after(delay, lambda: self.animate_step(4))
@@ -295,9 +313,9 @@ class BeautyContestUI(tk.Tk):
         elif step == 4:
             match_winner = self.logic.get_match_winner()
             if match_winner:
-                win_msg = f"Selamat!\nPlayer {match_winner.id} Menang!"
+                win_msg = f"Selamat!\n{match_winner.name} Menang!"
                 if match_winner.is_bot:
-                     win_msg = f"Game Over!\nBot P{match_winner.id} Memenangkan Pertandingan."
+                     win_msg = f"Game Over!\n{match_winner.name} Memenangkan Pertandingan."
                 
                 messagebox.showinfo("GAME OVER", win_msg)
                 self.destroy()

@@ -3,23 +3,39 @@ import config
 import math
 
 class Player:
-    def __init__(self, p_id, is_bot=False):
+    def __init__(self, p_id, name, is_bot=False):
         self.id = p_id
+        self.name = name # Atribut Nama Baru
         self.score = config.STARTING_SCORE
         self.is_eliminated = False
         self.last_choice = None
         self.is_bot = is_bot
 
 class BeautyContestLogic:
-    def __init__(self, num_players, single_player_mode=False):
+    def __init__(self, num_players, single_player_mode=False, player_names=None):
         self.num_players = num_players
         self.players = []
         
         for i in range(num_players):
+            p_id = i + 1
             is_bot = False
-            if single_player_mode and i > 0: 
-                is_bot = True
-            self.players.append(Player(i+1, is_bot))
+            name = f"Player {p_id}" # Nama Default
+            
+            if single_player_mode:
+                # Mode Single: P1 Manusia, Sisanya Bot
+                if i == 0:
+                    # Jika ada nama custom untuk P1 (Manusia)
+                    if player_names and len(player_names) > 0:
+                        name = player_names[0]
+                else:
+                    is_bot = True
+                    name = f"Bot {p_id}"
+            else:
+                # Mode Multiplayer: Gunakan daftar nama yang diinput
+                if player_names and i < len(player_names):
+                    name = player_names[i]
+            
+            self.players.append(Player(p_id, name, is_bot))
             
         self.current_player_idx = 0
         self.find_next_active_player()
@@ -59,15 +75,8 @@ class BeautyContestLogic:
 
         choices = [p.last_choice for p in active_players]
         
-        # --- PERUBAHAN UTAMA DI SINI ---
-        # Hitung rata-rata murni dulu
         raw_avg = sum(choices) / count
-        
-        # Floor Rata-rata untuk ditampilkan/disimpan
         avg = math.floor(raw_avg)
-        
-        # Hitung Target (0.8 dari Rata-rata MURNI, lalu di-floor)
-        # Menggunakan rata-rata murni lebih akurat secara matematis sebelum difloor
         target = math.floor(raw_avg * 0.8)
         
         winners = []
@@ -102,7 +111,8 @@ class BeautyContestLogic:
                     seen[val] = True
                 
                 if duplicates:
-                    special_event_log.append(f"DUPLIKASI: Angka {', '.join(map(str, [int(x) for x in duplicates]))} hangus!")
+                    dup_str = ', '.join(map(str, [int(x) for x in duplicates]))
+                    special_event_log.append(f"DUPLIKASI: Angka {dup_str} hangus!")
                     for p in active_players:
                         if p.last_choice in duplicates:
                             invalid_players.append(p)
@@ -113,7 +123,6 @@ class BeautyContestLogic:
                 special_event_log.append("SEMUA INVALID! Tidak ada pemenang.")
                 losers = active_players 
             else:
-                # Cari pemenang berdasarkan selisih dengan TARGET INTEGER
                 min_diff = float('inf')
                 for p in valid_candidates:
                     diff = abs(target - p.last_choice)
@@ -129,7 +138,6 @@ class BeautyContestLogic:
 
                 # --- RULE: 3 PLAYERS OR LESS (Exact Match Bonus) ---
                 if count <= 3:
-                    # Karena target sudah integer (floor), Exact Match tinggal cek kesamaan
                     is_exact = any(p.last_choice == target for p in winners)
                     
                     if is_exact:
@@ -137,15 +145,14 @@ class BeautyContestLogic:
                         special_event_log.append(f"CRITICAL HIT! Tepat sasaran {target}!")
                         special_event_log.append("Penalti yang kalah menjadi -2!")
 
-        # --- TERAPKAN HASIL ---
         for p in losers:
             p.score -= current_penalty
             if p.score <= config.ELIMINATION_THRESHOLD:
                 p.is_eliminated = True
 
         return {
-            "avg": avg,     # Sudah Integer
-            "target": target, # Sudah Integer
+            "avg": avg,
+            "target": target,
             "winners": winners,
             "losers": losers,
             "all_players": self.players,
