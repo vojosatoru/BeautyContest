@@ -285,7 +285,39 @@ class BeautyContestUI(tk.Tk):
             self.after(delay, lambda: self.animate_step(1))
             
         elif step == 1:
-            self.log(f"\nRata-rata : {res['avg']}") 
+            # Show raw average and per-player calculation details
+            raw_avg = res.get('raw_avg', None)
+            if raw_avg is not None:
+                self.log(f"\nRata-rata (raw) : {raw_avg:.2f}")
+            self.log(f"Rata-rata (dibulatkan) : {res['avg']}")
+
+            # Per-player detailed process
+            per_list = res.get('per_player', [])
+            if per_list:
+                self.log("\nProses Per-Pemain:")
+                for rec in per_list:
+                    name = rec.get('name', f"P{rec.get('id')}")
+                    choice = int(rec.get('choice', 0))
+                    diff_avg = rec.get('diff_to_avg', None)
+                    diff_t = rec.get('diff_to_target', None)
+                    status = rec.get('status', '')
+
+                    diff_avg_str = f"{diff_avg:.2f}" if diff_avg is not None else "-"
+                    diff_t_str = "N/A" if diff_t is None else str(int(diff_t))
+
+                    line = f"{name}: pilih {choice} | diff->avg: {diff_avg_str} | diff->target: {diff_t_str}"
+                    color = None
+                    bold = False
+                    if status == 'invalid':
+                        line += "  (INVALID - duplikasi)"
+                        color = config.COLOR_TEXT_ELIMINATED
+                    elif status == 'winner':
+                        line += "  (WINNER)"
+                        color = 'green'
+                        bold = True
+
+                    self.log(line, color=color, bold=bold)
+
             self.after(delay, lambda: self.animate_step(2))
             
         elif step == 2:

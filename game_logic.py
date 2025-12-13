@@ -74,7 +74,7 @@ class BeautyContestLogic:
         if count == 0: return None
 
         choices = [p.last_choice for p in active_players]
-        
+
         raw_avg = sum(choices) / count
         avg = math.floor(raw_avg)
         target = math.floor(raw_avg * 0.8)
@@ -85,6 +85,18 @@ class BeautyContestLogic:
         special_event_log = [] 
         
         current_penalty = config.LOSS_PENALTY
+
+        # Prepare per-player detail records for UI logging
+        per_player = []
+        for p in active_players:
+            per_player.append({
+                "id": p.id,
+                "name": p.name,
+                "choice": p.last_choice,
+                "is_invalid": False,
+                "diff_to_target": None,
+                "diff_to_avg": abs(raw_avg - p.last_choice)
+            })
 
         # --- RULE: 2 PLAYERS (0 vs 100) ---
         rule_2p_triggered = False
@@ -116,6 +128,10 @@ class BeautyContestLogic:
                     for p in active_players:
                         if p.last_choice in duplicates:
                             invalid_players.append(p)
+                            # mark per_player
+                            for rec in per_player:
+                                if rec['id'] == p.id:
+                                    rec['is_invalid'] = True
             
             valid_candidates = [p for p in active_players if p not in invalid_players]
             
@@ -128,6 +144,10 @@ class BeautyContestLogic:
                     diff = abs(target - p.last_choice)
                     if diff < min_diff:
                         min_diff = diff
+                    # update per_player diff
+                    for rec in per_player:
+                        if rec['id'] == p.id:
+                            rec['diff_to_target'] = diff
                 
                 round_winners = [p for p in valid_candidates if abs(target - p.last_choice) == min_diff]
                 winners.extend(round_winners)
@@ -150,14 +170,30 @@ class BeautyContestLogic:
             if p.score <= config.ELIMINATION_THRESHOLD:
                 p.is_eliminated = True
 
+        # Finalize per_player statuses
+        for rec in per_player:
+            if rec['is_invalid']:
+                rec['status'] = 'invalid'
+            else:
+                # find player object
+                p_obj = next((x for x in active_players if x.id == rec['id']), None)
+                if p_obj in winners:
+                    rec['status'] = 'winner'
+                elif p_obj in losers:
+                    rec['status'] = 'loser'
+                else:
+                    rec['status'] = 'unknown'
+
         return {
+            "raw_avg": raw_avg,
             "avg": avg,
             "target": target,
             "winners": winners,
             "losers": losers,
             "all_players": self.players,
             "logs": special_event_log,
-            "active_count": count
+            "active_count": count,
+            "per_player": per_player
         }
 
     def get_match_winner(self):

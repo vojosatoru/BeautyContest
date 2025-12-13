@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Beauty Contest Online</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        body { font-family: Helvetica, sans-serif; background: #f0f0f0; text-align: center; padding: 20px; }
+        .hidden { display: none; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); max-width: 600px; margin: 0 auto; }
+        input, button { padding: 10px; margin: 5px; font-size: 16px; }
+        button { cursor: pointer; background: #4caf50; color: white; border: none; border-radius: 4px; }
+        button:disabled { background: #ccc; }
+        
+        /* Area Log */
+        .log-area { background: #333; color: #0f0; font-family: monospace; text-align: left; padding: 10px; height: 150px; overflow-y: scroll; margin-top: 10px; border-radius: 5px;}
+        
+        /* Tabel */
+        table { width: 100%; margin-top: 10px; border-collapse: collapse; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: center;}
+        th { background-color: #f2f2f2; }
+        
+        /* Highlight */
+        .eliminated { background-color: #ffcccc; color: red; }
+        .winner-row { background-color: #d4edda; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div id="login-screen" class="card">
+        <h2>Masuk Game</h2>
+        <input type="text" id="username" placeholder="Nama Anda">
+        <button onclick="joinGame()">Join Lobby</button>
+    </div>
+
+    <div id="lobby-screen" class="card hidden">
+        <h2>Lobby</h2>
+        <p>Menunggu pemain lain...</p>
+        <ul id="player-list" style="list-style: none; padding: 0;"></ul>
+        <button id="btn-start" onclick="startGame()">Mulai Game</button>
+    </div>
+
+    <div id="game-screen" class="card hidden">
+        <h2 id="status-text">Masukkan Tebakan (0-100)</h2>
+        <input type="number" id="guess-input" min="0" max="100">
+        <button id="btn-submit" onclick="submitGuess()">Kirim</button>
+        
+        <h3>Scoreboard & Hasil Ronde</h3>
+        <table id="scoreboard">
+            <thead>
+                <tr>
+                    <th>Nama</th>
+                    <th>Tebakan</th> <th>Skor Total</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+
+        <div class="log-area" id="game-log"></div>
+    </div>
+
+    <script>
+        const socket = io();
+        let myName = "";
+
+        function joinGame() {
+            myName = document.getElementById('username').value;
+            if(!myName) return alert("Isi nama dulu!");
+            socket.emit('join_game', {name: myName});
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('lobby-screen').classList.remove('hidden');
+        }
+
+        socket.on('update_lobby', (data) => {
+            const list = document.getElementById('player-list');
+            list.innerHTML = data.players.map(p => `<li>👤 ${p}</li>`).join('');
+        });
+
+        function startGame() {
+            socket.emit('start_game');
+        }
+
+        socket.on('game_started', () => {
+            document.getElementById('lobby-screen').classList.add('hidden');
+            document.getElementById('game-screen').classList.remove('hidden');
+            log("Game Dimulai! Silakan tebak angka.");
+        });
+
+        function submitGuess() {
+            const val = document.getElementById('guess-input').value;
+            if(val === "") return;
+            socket.emit('submit_guess', {value: val});
+            document.getElementById('btn-submit').disabled = true;
+            document.getElementById('status-text').innerText = "Menunggu lawan...";
+        }
+
+        // --- BAGIAN UTAMA YANG DIUBAH ---
+        socket.on('round_results', (res) => {
+            log(`------------------`);
+            log(`🎯 Target Menang: ${parseFloat(res.target).toFixed(2)}`);
+            log(`📊 Rata-rata: ${parseFloat(res.avg).toFixed(2)}`);
+            
+            // Tampilkan log siapa pilih apa (jika dikirim dari backend)
+            if(res.logs) {
+                res.logs.forEach(l => log(`> ${l}`));
+            }
+
+            log(`🏆 WINNER: ${res.winners.join(', ')}`);
+
+            // Update Scoreboard dengan kolom Tebakan
+            const tbody = document.querySelector('#scoreboard tbody');
+            tbody.innerHTML = res.scoreboard.map(p => {
+                // Cek apakah pemain ini adalah pemenang ronde ini
+                const isWinner = res.winners.includes(p.name);
+                const rowClass = isWinner ? 'winner-row' : (p.eliminated ? 'eliminated' : '');
+                
+                // Tampilkan angka tebakan (jika ada datanya, kalau tidak strip -)
+                const tebakan = p.last_guess !== undefined ? p.last_guess : '-';
+
+                return `
+                <tr class="${rowClass}">
+                    <td>${p.name} ${isWinner ? '👑' : ''}</td>
+                    <td>${tebakan}</td> 
+                    <td>${p.score}</td>
+                </tr>`;
+            }).join('');
+
+            // Reset Input
+            document.getElementById('btn-submit').disabled = false;
+            document.getElementById('guess-input').value = "";
+            document.getElementById('status-text').innerText = "Ronde Baru! Masukkan Angka.";
+        });
+
+        socket.on('game_over', (data) => {
+            alert("GAME OVER! Pemenang: " + data.winner);
+            location.reload();
+        });
+
+        function log(msg) {
+            const area = document.getElementById('game-log');
+            area.innerHTML += `<div>${msg}</div>`;
+            area.scrollTop = area.scrollHeight;
+        }
+    </script>
+</body>
+</html>
