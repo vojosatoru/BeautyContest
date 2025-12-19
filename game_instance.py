@@ -3,17 +3,22 @@ from game_logic import BeautyContestLogic, Player
 
 class WebGameManager(BeautyContestLogic):
     def __init__(self):
-        # Kita inisialisasi kosong dulu
+        # Override init karena di web pemain join satu-satu (Lobby System)
         self.players = []
         self.num_players = 0
         self.current_player_idx = 0
         self.game_started = False
-        self.player_map = {} # Mapping session_id (socket) ke Player Object
+        self.player_map = {} # Session ID -> Player Object
 
     def add_player(self, session_id, name):
         if self.game_started:
             return False
         
+        # Hindari nama duplikat di Lobby
+        for p in self.players:
+            if p.name == name:
+                name = name + f"_{len(self.players)+1}"
+
         p_id = len(self.players) + 1
         new_player = Player(p_id, name)
         self.players.append(new_player)
@@ -22,7 +27,7 @@ class WebGameManager(BeautyContestLogic):
         return True
 
     def start_game(self):
-        if self.num_players >= 2: # Minimal 2 orang
+        if self.num_players >= 2:
             self.game_started = True
             return True
         return False
@@ -33,15 +38,27 @@ class WebGameManager(BeautyContestLogic):
         player = self.player_map.get(session_id)
         if not player or player.is_eliminated: return False
 
-        # Simpan pilihan player (tanpa menunggu giliran urut seperti desktop)
+        # Di versi web, input langsung disimpan ke .last_choice
         player.last_choice = float(choice)
         
-        # Cek apakah semua pemain aktif sudah memilih?
+        # Cek apakah SEMUA pemain aktif sudah memilih?
         active_players = [p for p in self.players if not p.is_eliminated]
         all_chosen = all(p.last_choice is not None for p in active_players)
         
-        return all_chosen # True jika ronde selesai
+        return all_chosen # Return True jika ronde selesai
 
     def reset_choices(self):
         for p in self.players:
             p.last_choice = None
+
+    def get_active_rules_text(self):
+        """Mengembalikan teks aturan aktif untuk dikirim ke HP"""
+        count = self.get_active_player_count()
+        rules = []
+        if count <= 4: rules.append("⚠ Penalti Duplikasi: Angka kembar hangus!")
+        if count <= 3: rules.append("⚠ Serangan Kritis: Tebakan tepat = -2 poin!")
+        if count == 2: rules.append("⚠ Duel: Jika 0 vs 100, 100 menang!")
+        
+        if not rules:
+            return "Aturan Standar (Pilih 0.8 x Rata-rata)"
+        return " | ".join(rules)

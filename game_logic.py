@@ -1,11 +1,14 @@
 # game_logic.py
+# PERHATIAN: File ini harus SAMA PERSIS dengan versi Desktop (Main Branch)
+# agar aturan mainnya (Strategic Mode, Double Desimal) konsisten.
+
 import config
 import math
 
 class Player:
     def __init__(self, p_id, name, is_bot=False):
         self.id = p_id
-        self.name = name # Atribut Nama Baru
+        self.name = name
         self.score = config.STARTING_SCORE
         self.is_eliminated = False
         self.last_choice = None
@@ -19,19 +22,16 @@ class BeautyContestLogic:
         for i in range(num_players):
             p_id = i + 1
             is_bot = False
-            name = f"Player {p_id}" # Nama Default
+            name = f"Player {p_id}"
             
             if single_player_mode:
-                # Mode Single: P1 Manusia, Sisanya Bot
                 if i == 0:
-                    # Jika ada nama custom untuk P1 (Manusia)
                     if player_names and len(player_names) > 0:
                         name = player_names[0]
                 else:
                     is_bot = True
                     name = f"Bot {p_id}"
             else:
-                # Mode Multiplayer: Gunakan daftar nama yang diinput
                 if player_names and i < len(player_names):
                     name = player_names[i]
             
@@ -74,10 +74,11 @@ class BeautyContestLogic:
         if count == 0: return None
 
         choices = [p.last_choice for p in active_players]
-
+        
+        # --- LOGIKA DOUBLE (2 DESIMAL) ---
         raw_avg = sum(choices) / count
-        avg = math.floor(raw_avg)
-        target = math.floor(raw_avg * 0.8)
+        avg = round(raw_avg, 2)
+        target = round(avg * 0.8, 2)
         
         winners = []
         losers = []
@@ -85,18 +86,6 @@ class BeautyContestLogic:
         special_event_log = [] 
         
         current_penalty = config.LOSS_PENALTY
-
-        # Prepare per-player detail records for UI logging
-        per_player = []
-        for p in active_players:
-            per_player.append({
-                "id": p.id,
-                "name": p.name,
-                "choice": p.last_choice,
-                "is_invalid": False,
-                "diff_to_target": None,
-                "diff_to_avg": abs(raw_avg - p.last_choice)
-            })
 
         # --- RULE: 2 PLAYERS (0 vs 100) ---
         rule_2p_triggered = False
@@ -128,10 +117,6 @@ class BeautyContestLogic:
                     for p in active_players:
                         if p.last_choice in duplicates:
                             invalid_players.append(p)
-                            # mark per_player
-                            for rec in per_player:
-                                if rec['id'] == p.id:
-                                    rec['is_invalid'] = True
             
             valid_candidates = [p for p in active_players if p not in invalid_players]
             
@@ -144,12 +129,9 @@ class BeautyContestLogic:
                     diff = abs(target - p.last_choice)
                     if diff < min_diff:
                         min_diff = diff
-                    # update per_player diff
-                    for rec in per_player:
-                        if rec['id'] == p.id:
-                            rec['diff_to_target'] = diff
                 
-                round_winners = [p for p in valid_candidates if abs(target - p.last_choice) == min_diff]
+                # Toleransi floating point
+                round_winners = [p for p in valid_candidates if abs(abs(target - p.last_choice) - min_diff) < 0.000001]
                 winners.extend(round_winners)
                 
                 for p in active_players:
@@ -158,11 +140,13 @@ class BeautyContestLogic:
 
                 # --- RULE: 3 PLAYERS OR LESS (Exact Match Bonus) ---
                 if count <= 3:
-                    is_exact = any(p.last_choice == target for p in winners)
+                    # Rounding ke integer terdekat hanya untuk cek Critical Hit
+                    rounded_target = round(target)
+                    is_exact = any(p.last_choice == rounded_target for p in winners)
                     
                     if is_exact:
                         current_penalty = config.CRITICAL_PENALTY
-                        special_event_log.append(f"CRITICAL HIT! Tepat sasaran {target}!")
+                        special_event_log.append(f"CRITICAL HIT! Tepat sasaran {rounded_target}!")
                         special_event_log.append("Penalti yang kalah menjadi -2!")
 
         for p in losers:
@@ -170,30 +154,14 @@ class BeautyContestLogic:
             if p.score <= config.ELIMINATION_THRESHOLD:
                 p.is_eliminated = True
 
-        # Finalize per_player statuses
-        for rec in per_player:
-            if rec['is_invalid']:
-                rec['status'] = 'invalid'
-            else:
-                # find player object
-                p_obj = next((x for x in active_players if x.id == rec['id']), None)
-                if p_obj in winners:
-                    rec['status'] = 'winner'
-                elif p_obj in losers:
-                    rec['status'] = 'loser'
-                else:
-                    rec['status'] = 'unknown'
-
         return {
-            "raw_avg": raw_avg,
             "avg": avg,
             "target": target,
             "winners": winners,
             "losers": losers,
             "all_players": self.players,
             "logs": special_event_log,
-            "active_count": count,
-            "per_player": per_player
+            "active_count": count
         }
 
     def get_match_winner(self):

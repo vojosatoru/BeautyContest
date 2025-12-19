@@ -5,52 +5,80 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <style>
-        body { font-family: Helvetica, sans-serif; background: #f0f0f0; text-align: center; padding: 20px; }
-        .hidden { display: none; }
-        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); max-width: 600px; margin: 0 auto; }
-        input, button { padding: 10px; margin: 5px; font-size: 16px; }
-        button { cursor: pointer; background: #4caf50; color: white; border: none; border-radius: 4px; }
-        button:disabled { background: #ccc; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #eef2f3; text-align: center; padding: 10px; margin: 0; }
+        .hidden { display: none !important; }
+        .card { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); max-width: 500px; margin: 10px auto; }
         
-        /* Area Log */
-        .log-area { background: #333; color: #0f0; font-family: monospace; text-align: left; padding: 10px; height: 150px; overflow-y: scroll; margin-top: 10px; border-radius: 5px;}
+        h2 { color: #333; margin-bottom: 10px; font-size: 1.5rem; }
+        input { padding: 12px; width: 80%; border: 2px solid #ddd; border-radius: 8px; font-size: 18px; text-align: center; }
         
-        /* Tabel */
-        table { width: 100%; margin-top: 10px; border-collapse: collapse; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: center;}
-        th { background-color: #f2f2f2; }
+        button { 
+            width: 100%; padding: 12px; margin-top: 15px; font-size: 18px; font-weight: bold;
+            cursor: pointer; background: #4caf50; color: white; border: none; border-radius: 8px; 
+            transition: background 0.3s;
+        }
+        button:active { background: #388e3c; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+
+        /* Rules Box */
+        .rules-box {
+            background: #fff3cd; color: #856404; border: 1px solid #ffeeba;
+            padding: 10px; margin-bottom: 15px; border-radius: 8px; font-size: 0.9rem; font-weight: bold;
+        }
+
+        /* Log Area */
+        .log-area { 
+            background: #222; color: #00ff00; font-family: 'Consolas', monospace; font-size: 0.85rem;
+            text-align: left; padding: 10px; height: 150px; overflow-y: auto; 
+            margin-top: 15px; border-radius: 8px; border: 2px solid #444;
+        }
+        .log-msg { border-bottom: 1px solid #333; padding: 2px 0; }
         
-        /* Highlight */
-        .eliminated { background-color: #ffcccc; color: red; }
-        .winner-row { background-color: #d4edda; font-weight: bold; }
+        /* Table */
+        table { width: 100%; margin-top: 15px; border-collapse: collapse; font-size: 0.9rem; }
+        th, td { border: 1px solid #eee; padding: 8px 4px; text-align: center;}
+        th { background-color: #f8f9fa; color: #555; }
+        
+        /* Status Colors */
+        .eliminated { background-color: #ffebee; color: #c62828; text-decoration: line-through; }
+        .winner-row { background-color: #e8f5e9; font-weight: bold; color: #2e7d32; border: 2px solid #4caf50;}
+        .me { background-color: #e3f2fd; } 
     </style>
 </head>
 <body>
 
+    <!-- Login -->
     <div id="login-screen" class="card">
-        <h2>Masuk Game</h2>
-        <input type="text" id="username" placeholder="Nama Anda">
-        <button onclick="joinGame()">Join Lobby</button>
+        <h2>🔥 Beauty Contest</h2>
+        <p>Strategic Mode</p>
+        <input type="text" id="username" placeholder="Masukkan Nama Anda" maxlength="10">
+        <button onclick="joinGame()">Masuk Lobby</button>
     </div>
 
+    <!-- Lobby -->
     <div id="lobby-screen" class="card hidden">
         <h2>Lobby</h2>
         <p>Menunggu pemain lain...</p>
-        <ul id="player-list" style="list-style: none; padding: 0;"></ul>
-        <button id="btn-start" onclick="startGame()">Mulai Game</button>
+        <div id="player-count" style="font-weight:bold; color:blue; margin-bottom:10px;">0 Pemain</div>
+        <ul id="player-list" style="list-style: none; padding: 0; font-size: 1.1rem;"></ul>
+        <button id="btn-start" onclick="startGame()">Mulai Game (Host)</button>
     </div>
 
+    <!-- Game -->
     <div id="game-screen" class="card hidden">
-        <h2 id="status-text">Masukkan Tebakan (0-100)</h2>
-        <input type="number" id="guess-input" min="0" max="100">
-        <button id="btn-submit" onclick="submitGuess()">Kirim</button>
+        <div id="active-rules" class="rules-box">Memuat aturan...</div>
+
+        <h2 id="status-text">Tebak Angka (0-100)</h2>
+        <input type="number" id="guess-input" min="0" max="100" step="0.01" placeholder="0 - 100">
+        <button id="btn-submit" onclick="submitGuess()">Kirim Tebakan</button>
         
-        <h3>Scoreboard & Hasil Ronde</h3>
+        <h3>Papan Skor</h3>
         <table id="scoreboard">
             <thead>
                 <tr>
                     <th>Nama</th>
-                    <th>Tebakan</th> <th>Skor Total</th>
+                    <th>Jwb</th> 
+                    <th>Poin</th>
                 </tr>
             </thead>
             <tbody></tbody>
@@ -64,81 +92,112 @@
         let myName = "";
 
         function joinGame() {
-            myName = document.getElementById('username').value;
-            if(!myName) return alert("Isi nama dulu!");
+            myName = document.getElementById('username').value.trim();
+            if(!myName) return alert("Nama tidak boleh kosong!");
             socket.emit('join_game', {name: myName});
+            
             document.getElementById('login-screen').classList.add('hidden');
             document.getElementById('lobby-screen').classList.remove('hidden');
         }
 
         socket.on('update_lobby', (data) => {
             const list = document.getElementById('player-list');
-            list.innerHTML = data.players.map(p => `<li>👤 ${p}</li>`).join('');
+            document.getElementById('player-count').innerText = data.count + " Pemain";
+            list.innerHTML = data.players.map(p => 
+                `<li style="padding:5px; border-bottom:1px solid #eee;">👤 ${p}</li>`
+            ).join('');
         });
 
         function startGame() {
             socket.emit('start_game');
         }
 
-        socket.on('game_started', () => {
+        socket.on('game_started', (data) => {
             document.getElementById('lobby-screen').classList.add('hidden');
             document.getElementById('game-screen').classList.remove('hidden');
-            log("Game Dimulai! Silakan tebak angka.");
+            document.getElementById('active-rules').innerText = data.active_rules;
+            log("🚀 Game Dimulai! Silakan masukkan tebakan.");
         });
 
         function submitGuess() {
             const val = document.getElementById('guess-input').value;
-            if(val === "") return;
+            if(val === "" || val < 0 || val > 100) return alert("Masukkan angka 0-100!");
+            
             socket.emit('submit_guess', {value: val});
             document.getElementById('btn-submit').disabled = true;
-            document.getElementById('status-text').innerText = "Menunggu lawan...";
+            document.getElementById('btn-submit').innerText = "Menunggu lawan...";
+            document.getElementById('status-text').innerText = "Menunggu...";
         }
 
-        // --- BAGIAN UTAMA YANG DIUBAH ---
+        socket.on('guess_accepted', (data) => {
+            log(`✔ Jawaban dikirim: ${data.val}`);
+        });
+
         socket.on('round_results', (res) => {
-            log(`------------------`);
-            log(`🎯 Target Menang: ${parseFloat(res.target).toFixed(2)}`);
+            log(`====================`);
+            log(`🎯 Target: ${parseFloat(res.target).toFixed(2)}`);
             log(`📊 Rata-rata: ${parseFloat(res.avg).toFixed(2)}`);
             
-            // Tampilkan log siapa pilih apa (jika dikirim dari backend)
-            if(res.logs) {
-                res.logs.forEach(l => log(`> ${l}`));
+            if(res.logs && res.logs.length > 0) {
+                res.logs.forEach(l => log(`⚠ ${l}`));
             }
 
-            log(`🏆 WINNER: ${res.winners.join(', ')}`);
+            if(res.winners.length > 0) log(`🏆 WIN: ${res.winners.join(', ')}`);
+            else log(`💀 Tidak ada pemenang.`);
 
-            // Update Scoreboard dengan kolom Tebakan
+            document.getElementById('active-rules').innerText = res.active_rules;
+
             const tbody = document.querySelector('#scoreboard tbody');
             tbody.innerHTML = res.scoreboard.map(p => {
-                // Cek apakah pemain ini adalah pemenang ronde ini
                 const isWinner = res.winners.includes(p.name);
-                const rowClass = isWinner ? 'winner-row' : (p.eliminated ? 'eliminated' : '');
+                const isMe = p.name === myName;
                 
-                // Tampilkan angka tebakan (jika ada datanya, kalau tidak strip -)
-                const tebakan = p.last_guess !== undefined ? p.last_guess : '-';
+                let rowClass = '';
+                if (p.eliminated) rowClass = 'eliminated';
+                else if (isWinner) rowClass = 'winner-row';
+                else if (isMe) rowClass = 'me';
+
+                const guessDisplay = p.last_guess !== null && p.last_guess !== undefined ? p.last_guess : '-';
 
                 return `
                 <tr class="${rowClass}">
-                    <td>${p.name} ${isWinner ? '👑' : ''}</td>
-                    <td>${tebakan}</td> 
+                    <td>${isMe ? '👉 ' : ''}${p.name}</td>
+                    <td>${guessDisplay}</td> 
                     <td>${p.score}</td>
                 </tr>`;
             }).join('');
 
-            // Reset Input
-            document.getElementById('btn-submit').disabled = false;
-            document.getElementById('guess-input').value = "";
-            document.getElementById('status-text').innerText = "Ronde Baru! Masukkan Angka.";
+            const btn = document.getElementById('btn-submit');
+            const input = document.getElementById('guess-input');
+            const myData = res.scoreboard.find(p => p.name === myName);
+            
+            if(myData && myData.eliminated) {
+                btn.disabled = true;
+                btn.innerText = "TERELIMINASI";
+                input.disabled = true;
+                input.placeholder = "Spectating...";
+                document.getElementById('status-text').innerText = "Anda Tereliminasi";
+            } else {
+                btn.disabled = false;
+                btn.innerText = "Kirim Tebakan";
+                input.value = "";
+                document.getElementById('status-text').innerText = "Ronde Baru";
+            }
         });
 
         socket.on('game_over', (data) => {
             alert("GAME OVER! Pemenang: " + data.winner);
-            location.reload();
+            log(`🏁 GAME OVER. Winner: ${data.winner}`);
+            document.getElementById('active-rules').innerText = "Permainan Selesai";
+            document.getElementById('btn-submit').disabled = true;
         });
 
         function log(msg) {
             const area = document.getElementById('game-log');
-            area.innerHTML += `<div>${msg}</div>`;
+            const div = document.createElement('div');
+            div.className = 'log-msg';
+            div.innerText = msg;
+            area.appendChild(div);
             area.scrollTop = area.scrollHeight;
         }
     </script>
